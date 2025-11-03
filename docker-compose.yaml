@@ -1,0 +1,130 @@
+services:
+  app:
+    image: ubuntu:latest
+    container_name: yii2_app
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    ports:
+      - "3000:80"
+    volumes:
+      - ./app:/var/www/html
+    environment:
+      DB_HOST: db
+      DB_NAME: yii2db
+      DB_USER: yii2user
+      DB_PASSWORD: supersecretpassword
+    depends_on:
+      - db
+      - node_exporter_app
+      
+  db:
+    image: postgres:latest
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: yii2db
+      POSTGRES_USER: yii2user
+      POSTGRES_PASSWORD: supersecretpassword
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    depends_on:
+      - node_exporter_db
+  proxy:
+    image: nginx:latest
+    container_name: nginx_proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/config/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./app:/var/www/html:ro
+    depends_on:
+      - app
+      - node_exporter_proxy
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_server
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - node_exporter_prometheus
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_dashboard
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+  node_exporter_app:
+    image: prom/node-exporter:latest
+    container_name: node_exporter_app
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host)($|/)'
+    expose:
+      - "9100"
+  node_exporter_db:
+    image: prom/node-exporter:latest
+    container_name: node_exporter_db
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host)($|/)'
+    expose:
+      - "9100"
+      
+  node_exporter_proxy:
+    image: prom/node-exporter:latest
+    container_name: node_exporter_proxy
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host)($|/)'
+    expose:
+      - "9100"
+      
+  node_exporter_prometheus:
+    image: prom/node-exporter:latest
+    container_name: node_exporter_prometheus
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host)($|/)'
+    expose:
+      - "9100"
+volumes:
+  db_data:
+  prometheus_data:
+  grafana_data:
